@@ -218,9 +218,9 @@ const App: React.FC = () => {
 
                 // --- ĐỒNG BỘ HÓA TẮT BÁO ĐỘNG ---
                 if (isYardUser) {
-                    // Nếu bất kỳ user nào đánh dấu đã nhận (acknowledgedByYard), tắt chuông cho các user Yard còn lại
                     if (itemData.acknowledgedByYard) {
                         stopAlarm();
+                        // Gửi sự kiện tắt thông báo cho NotificationOverlay
                         window.dispatchEvent(new CustomEvent('port-notification-close', { detail: { id: itemData.id } }));
                     } else if (!existing && itemData.status === 'pending') {
                         triggerStrongNotification(itemData.id, 'YÊU CẦU MỚI', `Tàu ${itemData.vesselName} đang chờ cấp vị trí hạ bãi.`);
@@ -228,7 +228,6 @@ const App: React.FC = () => {
                 } 
                 
                 if (isGateUser) {
-                    // Nếu bất kỳ user nào đánh dấu đã nhận (acknowledgedByGate), tắt chuông cho các user Gate còn lại
                     if (itemData.acknowledgedByGate) {
                         stopAlarm();
                         window.dispatchEvent(new CustomEvent('port-notification-close', { detail: { id: itemData.id } }));
@@ -254,11 +253,16 @@ const App: React.FC = () => {
     const handleAcknowledgeCloud = async (e: any) => {
         const { id, type } = e.detail;
         const req = requests.find(r => r.id === id);
-        if (req && isCloudConnected) {
+        if (req) {
             const updated = { ...req };
             if (type === 'YARD') updated.acknowledgedByYard = true;
             if (type === 'GATE') updated.acknowledgedByGate = true;
-            await syncTable('yard_requests', id, updated);
+            
+            setRequests(prev => prev.map(r => r.id === id ? updated : r));
+            
+            if (isCloudConnected) {
+                await syncTable('yard_requests', id, updated);
+            }
         }
     };
     window.addEventListener('port-request-acknowledge-cloud', handleAcknowledgeCloud);
@@ -266,7 +270,9 @@ const App: React.FC = () => {
   }, [requests, isCloudConnected]);
 
   const triggerStrongNotification = (requestId: string, title: string, body: string) => {
+    // Đảm bảo chuông phát liên tục
     startAlarm();
+    // Gửi sự kiện cho NotificationOverlay để xử lý Popup và Flashing Taskbar
     window.dispatchEvent(new CustomEvent('port-notification', { detail: { id: requestId, title, body } }));
   };
 
@@ -365,8 +371,10 @@ const App: React.FC = () => {
           requests={requests} 
           onAcknowledge={(id) => {
             const req = requests.find(r => r.id === id);
-            if (req && isCloudConnected) {
-              syncTable('yard_requests', id, { ...req, acknowledgedByGate: true });
+            if (req) {
+              const updated = { ...req, acknowledgedByGate: true };
+              setRequests(prev => prev.map(r => r.id === id ? updated : r));
+              if (isCloudConnected) syncTable('yard_requests', id, updated);
             }
             stopAlarm();
           }} 
@@ -379,16 +387,32 @@ const App: React.FC = () => {
             <YardDashboard 
               requests={requests} 
               onAssign={(id, loc) => {
-                const req = requests.find(r => r.id === id);
-                if (req && isCloudConnected) {
-                  syncTable('yard_requests', id, { ...req, status: 'assigned' as const, assignedLocation: loc, acknowledgedByGate: false });
-                }
+                setRequests(prev => {
+                  const req = prev.find(r => r.id === id);
+                  if (req) {
+                    const updated = { 
+                      ...req, 
+                      status: 'assigned' as const, 
+                      assignedLocation: loc, 
+                      acknowledgedByGate: false, 
+                      acknowledgedByYard: true 
+                    };
+                    if (isCloudConnected) {
+                      syncTable('yard_requests', id, updated);
+                    }
+                    return prev.map(r => r.id === id ? updated : r);
+                  }
+                  return prev;
+                });
+                stopAlarm();
               }} 
               containers={containers} schedule={schedule} blocks={blockConfigs} 
               onAcknowledge={(id) => {
                 const req = requests.find(r => r.id === id);
-                if (req && isCloudConnected) {
-                    syncTable('yard_requests', id, { ...req, acknowledgedByYard: true });
+                if (req) {
+                    const updated = { ...req, acknowledgedByYard: true };
+                    setRequests(prev => prev.map(r => r.id === id ? updated : r));
+                    if (isCloudConnected) syncTable('yard_requests', id, updated);
                 }
                 stopAlarm();
               }} 
