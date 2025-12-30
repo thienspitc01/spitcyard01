@@ -102,8 +102,16 @@ const YardDashboard: React.FC<YardDashboardProps> = ({ requests, onAssign, conta
       alert("Định dạng vị trí không hợp lệ! VD: A1-01-02-1");
       return;
     }
+    
+    // Thực thi gán vị trí - onAssign now handles both status and acknowledgment to avoid race conditions
     onAssign(reqId, loc);
-    onAcknowledge(reqId);
+    
+    // Xóa nội dung nhập sau khi thành công để Reset UI cho Request này
+    setManualInputs(prev => {
+        const next = { ...prev };
+        delete next[reqId];
+        return next;
+    });
   };
 
   const toggleBlockInBerth = (berthIndex: number, blockName: string) => {
@@ -258,6 +266,7 @@ const YardDashboard: React.FC<YardDashboardProps> = ({ requests, onAssign, conta
                                className="flex-1 px-5 py-3 rounded-xl border-2 border-slate-200 bg-white focus:border-blue-500 outline-none font-bold text-sm uppercase tracking-tight"
                                value={manualInputs[req.id] || ''}
                                onChange={(e) => setManualInputs({...manualInputs, [req.id]: e.target.value})}
+                               onKeyDown={(e) => e.key === 'Enter' && handleManualAssign(req.id)}
                              />
                              <button 
                                onClick={() => handleManualAssign(req.id)}
