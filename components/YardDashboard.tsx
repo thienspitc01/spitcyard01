@@ -17,11 +17,12 @@ const YardDashboard: React.FC<YardDashboardProps> = ({ requests, onAssign, conta
   const [suggestions, setSuggestions] = useState<Record<string, YardSuggestion>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [reservations, setReservations] = useState<Map<string, YardReservation>>(new Map());
+  // Trạng thái lưu trữ giá trị nhập thủ công cho từng request
+  const [manualInputs, setManualInputs] = useState<Record<string, string>>({});
 
   const [settings, setSettings] = useState<PlanningSettings>(() => {
     const saved = localStorage.getItem('planning_settings_v19');
     if (saved) return JSON.parse(saved);
-    // FIX: Added missing properties 'outWindowBlocks' and 'importFallbackBlocks' to satisfy PlanningSettings interface
     return {
       inWindowBlocks: ['A2', 'B2', 'C2', 'A1', 'B1', 'C1'],
       outWindowBlocks: ['D1', 'E1', 'F1', 'G1', 'H1', 'D2', 'E2', 'F2', 'G2', 'H2'],
@@ -87,6 +88,22 @@ const YardDashboard: React.FC<YardDashboardProps> = ({ requests, onAssign, conta
         });
       }
     }
+  };
+
+  const handleManualAssign = (reqId: string) => {
+    const loc = manualInputs[reqId]?.trim().toUpperCase();
+    if (!loc) {
+      alert("Vui lòng nhập vị trí!");
+      return;
+    }
+    // Kiểm tra định dạng cơ bản Block-Bay-Row-Tier
+    const parts = loc.split('-');
+    if (parts.length < 3) {
+      alert("Định dạng vị trí không hợp lệ! VD: A1-01-02-1");
+      return;
+    }
+    onAssign(reqId, loc);
+    onAcknowledge(reqId);
   };
 
   const toggleBlockInBerth = (berthIndex: number, blockName: string) => {
@@ -219,11 +236,38 @@ const YardDashboard: React.FC<YardDashboardProps> = ({ requests, onAssign, conta
                         </div>
                       </div>
 
-                      {!suggestions[req.id] && !loadingSuggestion && (
-                        <button onClick={() => runScoringEngine(req)} className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-blue-700 transition-all active:scale-95 text-sm tracking-widest uppercase italic">
-                          XIN VỊ TRÍ (DYNAMIC ENGINE)
-                        </button>
-                      )}
+                      <div className="space-y-4">
+                        {!suggestions[req.id] && !loadingSuggestion ? (
+                          <button onClick={() => runScoringEngine(req)} className="w-full bg-blue-600 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-blue-700 transition-all active:scale-95 text-sm tracking-widest uppercase italic">
+                            XIN VỊ TRÍ (AI ENGINE)
+                          </button>
+                        ) : loadingSuggestion === req.id ? (
+                          <div className="w-full bg-slate-100 py-5 rounded-2xl flex items-center justify-center gap-3">
+                             <div className="animate-spin h-5 w-5 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                             <span className="text-xs font-black text-slate-500 uppercase tracking-widest italic">Đang phân tích bãi...</span>
+                          </div>
+                        ) : null}
+
+                        {/* NHẬP THỦ CÔNG - MANUAL ENTRY */}
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-3">
+                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nhập vị trí thủ công (Manual)</label>
+                           <div className="flex gap-3">
+                             <input 
+                               type="text" 
+                               placeholder="Block-Bay-Row-Tier (VD: A1-01-02-1)"
+                               className="flex-1 px-5 py-3 rounded-xl border-2 border-slate-200 bg-white focus:border-blue-500 outline-none font-bold text-sm uppercase tracking-tight"
+                               value={manualInputs[req.id] || ''}
+                               onChange={(e) => setManualInputs({...manualInputs, [req.id]: e.target.value})}
+                             />
+                             <button 
+                               onClick={() => handleManualAssign(req.id)}
+                               className="bg-slate-900 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase italic tracking-widest hover:bg-black transition-all active:scale-95 shadow-lg"
+                             >
+                               XÁC NHẬN
+                             </button>
+                           </div>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="md:w-96">
@@ -238,7 +282,17 @@ const YardDashboard: React.FC<YardDashboardProps> = ({ requests, onAssign, conta
                               {suggestions[req.id].suggestedBlock}-{suggestions[req.id].bay}-{suggestions[req.id].row}-{suggestions[req.id].tier}
                            </div>
                            
-                           <button onClick={() => handleQuickAssign(req.id)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl hover:bg-slate-50 transition-all active:scale-95 shadow-xl uppercase italic tracking-tighter text-sm">XÁC NHẬN VỊ TRÍ</button>
+                           <button onClick={() => handleQuickAssign(req.id)} className="w-full bg-white text-slate-900 font-black py-4 rounded-2xl hover:bg-slate-50 transition-all active:scale-95 shadow-xl uppercase italic tracking-tighter text-sm">CHẤP NHẬN GỢI Ý</button>
+                        </div>
+                      )}
+
+                      {suggestions[req.id]?.notFound && (
+                        <div className="bg-red-50 p-8 rounded-[2.5rem] border-2 border-red-200 text-center animate-in shake duration-500">
+                           <div className="bg-red-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600">
+                              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                           </div>
+                           <h4 className="text-red-900 font-black text-xs uppercase tracking-widest mb-2">Bãi đã đầy / Không có vị trí!</h4>
+                           <p className="text-[10px] text-red-700 font-bold leading-relaxed">AI không tìm được vị trí an toàn tuân thủ quy tắc. Vui lòng kiểm tra lại bãi hoặc nhập thủ công.</p>
                         </div>
                       )}
                     </div>
@@ -248,7 +302,7 @@ const YardDashboard: React.FC<YardDashboardProps> = ({ requests, onAssign, conta
                     <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
-                        Nhật ký phân tích
+                        Nhật ký phân tích AI
                       </h4>
                       <div className="space-y-2">
                         {suggestions[req.id].validationTrace?.map((line, idx) => (
@@ -262,7 +316,7 @@ const YardDashboard: React.FC<YardDashboardProps> = ({ requests, onAssign, conta
                   )}
                 </div>
               </div>
-            );
+             );
           })}
         </div>
         
