@@ -1,0 +1,5 @@
+{
+  "name": "Container Yard Viewer",
+  "description": "An interactive container yard visualization tool with comprehensive yard maps (A-H, N, R, Z blocks). Upload an Excel file to see real-time location data and statistics.",
+  "requestFramePermissions": []
+}
